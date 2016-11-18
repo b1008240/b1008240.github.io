@@ -11,3 +11,173 @@
 <!-- CAMP JavaScript Tag -->
     </body>
 </html>
+
+
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/><meta name="exporter-version" content="Evernote Mac 6.9.2 (454159)"/><meta name="keywords" content="Aggregator, fluentd, td-agent"/><meta name="author" content="shouta.fukawa@gmail.com"/><meta name="created" content="2016-11-08 02:57:05 +0000"/><meta name="source" content="desktop.mac"/><meta name="updated" content="2016-11-08 10:52:21 +0000"/><title>[Linux]td-agent設定メモ</title></head><body>
+<div>
+<div>## td-agentのインストール</div>
+<div>
+<div style="box-sizing: border-box; padding: 8px; border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902);">
+<div><span style="font-size: 12px;"><span style="font-family: Monaco, Menlo, Consolas, 'Courier New', monospace;"><span style="color: rgb(51, 51, 51);">sudo curl -L https://toolbelt.treasuredata.com/sh/install-redhat-td-agent2.sh | sh</span></span></span></div>
+</div>
+<div><br/></div>
+<div>## fluent-plugin-record-reformerのインストール</div>
+<div style="-en-codeblock: true; box-sizing: border-box; padding: 8px; font-family: Monaco, Menlo, Consolas, &quot;Courier New&quot;, monospace; font-size: 12px; color: rgb(51, 51, 51); border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902); background-position: initial initial; background-repeat: initial initial;">
+<div>
+<div>[RS - fukawa_shota@rs-stg-tgr-trc-agr-y001.rs.ar.adtech.local ~]$ sudo /usr/sbin/td-agent-gem install fluent-plugin-record-reformer</div>
+<div>Fetching: fluent-plugin-record-reformer-0.8.2.gem (100%)</div>
+<div>Successfully installed fluent-plugin-record-reformer-0.8.2</div>
+<div>Parsing documentation for fluent-plugin-record-reformer-0.8.2</div>
+<div>Installing ri documentation for fluent-plugin-record-reformer-0.8.2</div>
+<div>Done installing documentation for fluent-plugin-record-reformer after 0 seconds</div>
+<div>1 gem installed</div>
+</div>
+</div>
+<div><br/></div>
+</div>
+</div>
+<div>## 設定ファイル</div>
+<div>
+<div>/etc/td-agent/td-agent.conf</div>
+</div>
+<div>
+<div style="box-sizing: border-box; padding: 8px; border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902);">
+<div># From Application Log File</div>
+<div>&lt;source&gt;</div>
+<div>  #TODO: Path for the application log</div>
+<div>  type                  tail</div>
+<div>  path                  "/var/log/tiger/place-#{ENV['TIGER_FORWARDER_TYPE']}.log"</div>
+<div>  pos_file              "/var/log/td-agent/tgr-place-#{ENV['TIGER_FORWARDER_TYPE']}-pos.log"</div>
+<div>  tag                   "tgr.#{ENV['TIGER_FORWARDER_TYPE']}"</div>
+<div>  format                none</div>
+<div>  @label                @raw</div>
+<div>&lt;/source&gt;</div>
+<div><br/></div>
+<div># add hostname</div>
+<div>&lt;label @raw&gt;</div>
+<div>  &lt;match **&gt;</div>
+<div>    type                record_reformer</div>
+<div>    tag                 ${tag}</div>
+<div>    &lt;record&gt;</div>
+<div>      hostname          ${hostname}</div>
+<div>    &lt;/record&gt;</div>
+<div>    @label              @reformed</div>
+<div>  &lt;/match&gt;</div>
+<div>&lt;/label&gt;</div>
+<div><br/></div>
+<div># forward</div>
+<div>&lt;label @reformed&gt;</div>
+<div>  &lt;match **&gt;</div>
+<div>    type forward</div>
+<div><br/></div>
+<div>    # About Availability</div>
+<div>    send_timeout          10s</div>
+<div>    recover_wait          10s</div>
+<div>    heartbeat_interval    1s</div>
+<div>    phi_threshold         16</div>
+<div>    hard_timeout          10s</div>
+<div><br/></div>
+<div>    # About Buffer(type:file)</div>
+<div>    # 256 * 8m = 2G for buffered data file</div>
+<div>    buffer_type           file</div>
+<div>    buffer_queue_limit    1024</div>
+<div>    buffer_chunk_limit    8m</div>
+<div>    flush_interval        3s</div>
+<div>    buffer_path           "/var/log/td-agent/buffer/tgr-palce-#{ENV['TIGER_FORWARDER_TYPE']}-buf.*.buff"</div>
+<div>    flush_at_shutdown     true</div>
+<div><br/></div>
+<div>    # About Retry</div>
+<div>    # 1 + 2 + 4 + 8 + 16 + 32 + (60 * 5) = 381s ~ 6min for detecting failure</div>
+<div>    retry_wait            1s</div>
+<div>    max_retry_wait        60s</div>
+<div>    retry_limit           10</div>
+<div>    disable_retry_limit   false</div>
+<div><br/></div>
+<div>    &lt;server&gt;</div>
+<div>      name                tgr-agr01</div>
+<div>      # TODO: HOSTが変更される場合の対応</div>
+<div>      host                "rs-#{ENV['TIGER_FORWARDER_ENV']}tgr-trc-log-y001"</div>
+<div>      port                "#{ENV['TIGER_AGGREGATOR_PORT']}"</div>
+<div>    &lt;/server&gt;</div>
+<div>    &lt;server&gt;</div>
+<div>      name                tgr-agr02</div>
+<div>      host                "rs-#{ENV['TIGER_FORWARDER_ENV']}tgr-trc-log-y002"</div>
+<div>      port                "#{ENV['TIGER_AGGREGATOR_PORT']}"</div>
+<div>      standby</div>
+<div>    &lt;/server&gt;</div>
+<div><br/></div>
+<div>    &lt;secondary&gt;</div>
+<div>      type                file</div>
+<div>      path                /var/log/td-agent/failed/forward-failed</div>
+<div>    &lt;/secondary&gt;</div>
+<div>  &lt;/match&gt;</div>
+<div>&lt;/label&gt;</div>
+</div>
+</div>
+<div>
+<div><br/></div>
+<div>## ログファイルの所有者変更</div>
+<div style="box-sizing: border-box; padding: 8px; color: rgb(51, 51, 51); border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902);">
+<div><span style="font-size: 12px;"><span style="font-family: Monaco, Menlo, Consolas, 'Courier New', monospace;">sudo chown td-agent /var/log/td-agent/td-agent.log</span></span></div>
+</div>
+<div><br/></div>
+</div>
+<div>
+<div>## 環境変数ファイルを用意</div>
+<div style="-en-codeblock: true; box-sizing: border-box; padding: 8px; font-family: Monaco, Menlo, Consolas, &quot;Courier New&quot;, monospace; font-size: 12px; color: rgb(51, 51, 51); border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902); background-position: initial initial; background-repeat: initial initial;">
+<div>cd /etc/td-agent</div>
+<div>sudo mkdir env</div>
+<div>sudo vi /etc/td-agent/env/td-agent.env</div>
+<div><br/></div>
+<div>########################</div>
+<div># Application Environments</div>
+<div>export TIGER_FORWARDER_TYPE="event"</div>
+<div>export TIGER_FORWARDER_ENV="stg-"</div>
+<div>export TIGER_AGGREGATOR_PORT="24225"</div>
+<div>########################</div>
+</div>
+<div><br/></div>
+</div>
+<div>
+<div>
+<div>## 環境変数を読み込める用にしておく</div>
+<div>sudo vi /etc/init.d/td-agent</div>
+<div># でくくったところだけ追加する感じ</div>
+<div style="-en-codeblock: true; box-sizing: border-box; padding: 8px; font-family: Monaco, Menlo, Consolas, &quot;Courier New&quot;, monospace; font-size: 12px; color: rgb(51, 51, 51); border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902); background-position: initial initial; background-repeat: initial initial;">
+<div>export PATH=/sbin:/usr/sbin:/bin:/usr/bin</div>
+<div><br/></div>
+<div>########################</div>
+<div># Application Environments</div>
+<div>TIGER_ENVS="/etc/td-agent/env/td-agent.env"</div>
+<div>if [ -f "$TIGER_ENVS" ]; then</div>
+<div>    . $TIGER_ENVS</div>
+<div>fi</div>
+<div>########################</div>
+<div><br/></div>
+<div>TD_AGENT_NAME=td-agent</div>
+<div>TD_AGENT_HOME=/opt/td-agent</div>
+<div>TD_AGENT_DEFAULT=/etc/sysconfig/td-agent</div>
+<div>TD_AGENT_USER=td-agent</div>
+<div>TD_AGENT_GROUP=td-agent</div>
+<div>TD_AGENT_RUBY=/opt/td-agent/embedded/bin/ruby</div>
+<div>TD_AGENT_BIN_FILE=/usr/sbin/td-agent</div>
+<div>TD_AGENT_LOG_FILE=/var/log/td-agent/td-agent.log</div>
+<div>TD_AGENT_PID_FILE=/var/run/td-agent/td-agent.pid</div>
+<div>TD_AGENT_LOCK_FILE=/var/lock/subsys/td-agent</div>
+<div>TD_AGENT_OPTIONS="--use-v1-config"</div>
+</div>
+</div>
+<div><br/></div>
+<div>## td-agentの起動 / 停止</div>
+<div>
+<div style="box-sizing: border-box; padding: 8px; border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902);">
+<div><span style="font-size: 12px;"><span style="font-family: Monaco, Menlo, Consolas, 'Courier New', monospace;"><span style="color: rgb(51, 51, 51);">sudo service td-agent start</span></span></span></div>
+<div><span style="font-size: 12px;"><span style="font-family: Monaco, Menlo, Consolas, 'Courier New', monospace;"><span style="color: rgb(51, 51, 51);">sudo service td-agent stop</span></span></span></div>
+</div>
+</div>
+<div><br/></div>
+<div>## 動作確認</div>
+<div>- place-event.logにログ書き込み(※ログ形式を合わせる)</div>
+<div style="-en-codeblock: true; box-sizing: border-box; padding: 8px; font-family: Monaco, Menlo, Consolas, &quot;Courier New&quot;, monospace; font-size: 12px; color: rgb(51, 51, 51); border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902); background-position: initial initial; background-repeat: initial initial;">
