@@ -102,7 +102,7 @@
     let model;
     tf.loadModel('./model/model.json')
         .then(pretrainedModel => {
-            document.getElementById('predict-button').removeAttribute('disabled', false);
+            document.getElementById('predict-button');
             model = pretrainedModel;
     });
 
